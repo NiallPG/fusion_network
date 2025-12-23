@@ -98,18 +98,40 @@ func (f *FusionEngine) updateThreat(threat *FusedThreat, reading *sensorpb.Senso
 }
 
 func (f *FusionEngine) recalculate(threat *FusedThreat) {
-	var sumX, sumY, sumConf float64
 	var sumLevel int
+	var sumConf float64
 
+	// Use circular mean for positions to handle wrap-around
+	var sinX, cosX, sinY, cosY float64
 	for _, r := range threat.Readings {
-		sumX += r.X * r.Confidence
-		sumY += r.Y * r.Confidence
+		// Convert to angles (0-100 maps to 0-2π)
+		angleX := (r.X / f.worldWidth) * 2 * math.Pi
+		angleY := (r.Y / f.worldHeight) * 2 * math.Pi
+
+		// Weight by confidence
+		sinX += math.Sin(angleX) * r.Confidence
+		cosX += math.Cos(angleX) * r.Confidence
+		sinY += math.Sin(angleY) * r.Confidence
+		cosY += math.Cos(angleY) * r.Confidence
+
 		sumConf += r.Confidence
 		sumLevel += int(r.Level)
 	}
 
-	threat.X = sumX / sumConf
-	threat.Y = sumY / sumConf
+	// Convert back from angles to positions
+	avgAngleX := math.Atan2(sinX, cosX)
+	avgAngleY := math.Atan2(sinY, cosY)
+
+	// Normalize to 0-100 range
+	threat.X = (avgAngleX / (2 * math.Pi)) * f.worldWidth
+	if threat.X < 0 {
+		threat.X += f.worldWidth
+	}
+	threat.Y = (avgAngleY / (2 * math.Pi)) * f.worldHeight
+	if threat.Y < 0 {
+		threat.Y += f.worldHeight
+	}
+
 	threat.Confidence = sumConf / float64(len(threat.Readings))
 	threat.Level = sumLevel / len(threat.Readings)
 	threat.LastSeen = time.Now()
