@@ -305,10 +305,19 @@
         const threats = new Map();
         let scale = 1;
         let canvasSize = 0;
+        let isPaused = false;
 
         async function sendCommand(cmd) {
             try {
-                const res = await fetch(`${CONTROL_URL}/${cmd}`, { method: 'POST' });
+                const res = await fetch(`${CONTROL_URL}/${cmd}`, { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
                 const data = await res.json();
                 updateSimStatus(data);
             } catch (err) {
@@ -319,6 +328,9 @@
         async function fetchStatus() {
             try {
                 const res = await fetch(`${CONTROL_URL}/status`);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
                 const data = await res.json();
                 updateSimStatus(data);
             } catch (err) {
@@ -331,8 +343,9 @@
             simStateEl.className = `value ${data.state}`;
             simTickEl.textContent = data.tick;
 
-            btnPause.disabled = data.state === 'paused';
-            btnResume.disabled = data.state === 'running';
+            isPaused = data.state === 'paused';
+            btnPause.disabled = isPaused;
+            btnResume.disabled = !isPaused;
         }
 
         btnPause.addEventListener('click', () => sendCommand('pause'));
@@ -349,7 +362,8 @@
         function createTickLabels() {
             tickLabelsContainer.innerHTML = '';
             
-            const plotSize = canvasSize - PADDING;
+            // FIX: Use 2 * PADDING to account for padding on both sides
+            const plotSize = canvasSize - 2 * PADDING;
             
             for (let i = 0; i <= 10; i++) {
                 const value = i * 10;
@@ -390,13 +404,17 @@
             mapArea.style.width = size + 'px';
             mapArea.style.height = size + 'px';
             
+            // Reset and apply scale for HiDPI
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(scale, scale);
+            
             createTickLabels();
             drawMap();
         }
 
         function worldToCanvas(x, y) {
-            const plotSize = canvasSize - PADDING;
+            // FIX: Use 2 * PADDING to account for padding on both sides
+            const plotSize = canvasSize - 2 * PADDING;
             return {
                 x: PADDING + (x / WORLD_SIZE) * plotSize,
                 y: PADDING + ((WORLD_SIZE - y) / WORLD_SIZE) * plotSize
@@ -417,7 +435,11 @@
 
         function drawMap() {
             const size = canvasSize;
-            const plotSize = size - PADDING;
+            // FIX: Use 2 * PADDING to account for padding on both sides
+            const plotSize = size - 2 * PADDING;
+
+            // Clear entire canvas
+            ctx.clearRect(0, 0, size, size);
 
             // Background
             ctx.fillStyle = '#111118';
@@ -534,6 +556,9 @@
             };
 
             ws.onmessage = (event) => {
+                // Skip updates when paused - freeze display
+                if (isPaused) return;
+
                 const data = JSON.parse(event.data);
                 
                 if (data.type === 'threat_update') {
@@ -553,10 +578,13 @@
         }
 
         setInterval(() => {
+            // Skip cleanup when paused - keep threats visible
+            if (isPaused) return;
+
             const now = Date.now();
             let changed = false;
             threats.forEach((threat, id) => {
-                if (now - threat.lastSeen > 3000) {
+                if (now - threat.lastSeen > 1500) {
                     threats.delete(id);
                     changed = true;
                 }

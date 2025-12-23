@@ -1,4 +1,5 @@
 package command
+
 // clustering engine
 import (
 	"math"
@@ -26,6 +27,8 @@ type FusionEngine struct {
 	threats        map[int]*FusedThreat
 	nextID         int
 	expirationTime time.Duration
+	worldWidth     float64
+	worldHeight    float64
 }
 
 func NewFusionEngine(clusterRadius float64, minSensors int) *FusionEngine {
@@ -35,6 +38,8 @@ func NewFusionEngine(clusterRadius float64, minSensors int) *FusionEngine {
 		threats:        make(map[int]*FusedThreat),
 		nextID:         1,
 		expirationTime: 2 * time.Second,
+		worldWidth:     100.0,
+		worldHeight:    100.0,
 	}
 }
 
@@ -44,7 +49,7 @@ func (f *FusionEngine) ProcessReading(reading *sensorpb.SensorReading) *FusedThr
 
 	// Try to match to existing threat
 	for _, threat := range f.threats {
-		dist := f.distance(reading.X, reading.Y, threat.X, threat.Y)
+		dist := f.wrappedDistance(reading.X, reading.Y, threat.X, threat.Y)
 		if dist <= f.clusterRadius {
 			f.updateThreat(threat, reading)
 			if threat.SensorCount >= f.minSensors {
@@ -110,9 +115,19 @@ func (f *FusionEngine) recalculate(threat *FusedThreat) {
 	threat.LastSeen = time.Now()
 }
 
-func (f *FusionEngine) distance(x1, y1, x2, y2 float64) float64 {
-	dx := x2 - x1
-	dy := y2 - y1
+// wrappedDistance calculates distance accounting for toroidal wrap-around
+func (f *FusionEngine) wrappedDistance(x1, y1, x2, y2 float64) float64 {
+	dx := math.Abs(x2 - x1)
+	dy := math.Abs(y2 - y1)
+
+	// Check if wrapping around is shorter
+	if dx > f.worldWidth/2 {
+		dx = f.worldWidth - dx
+	}
+	if dy > f.worldHeight/2 {
+		dy = f.worldHeight - dy
+	}
+
 	return math.Sqrt(dx*dx + dy*dy)
 }
 
