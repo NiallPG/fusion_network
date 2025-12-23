@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Fusion Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            display: flex;
+            height: 100vh;
+        }
+
+        #map-container {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            color: #4ade80;
+        }
+
+        #controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        #controls button {
+            padding: 8px 16px;
+            border: 1px solid #2a2a3a;
+            border-radius: 4px;
+            background: #1a1a24;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        #controls button:hover {
+            background: #252532;
+            border-color: #3a3a4a;
+        }
+
+        #controls button:active {
+            transform: scale(0.98);
+        }
+
+        #controls button.primary {
+            background: #065f46;
+            border-color: #047857;
+        }
+
+        #controls button.primary:hover {
+            background: #047857;
+        }
+
+        #controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #canvas-wrapper {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #map-area {
+            position: relative;
+        }
+
+        #map {
+            background: #111118;
+            border: 1px solid #2a2a3a;
+            border-radius: 4px;
+            display: block;
+        }
+
+        .axis-label {
+            position: absolute;
+            color: #666;
+            font-size: 0.75rem;
+        }
+
+        #x-axis-label {
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #y-axis-label {
+            left: -30px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+        }
+
+        .tick-label {
+            position: absolute;
+            color: #555;
+            font-size: 0.65rem;
+        }
+
+        #sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            background: #111118;
+            border-left: 1px solid #2a2a3a;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #connection-status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        #connection-status.connected {
+            background: #052e16;
+            color: #4ade80;
+        }
+
+        #connection-status.disconnected {
+            background: #2a0a0a;
+            color: #f87171;
+        }
+
+        #sim-status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+        }
+
+        #sim-status .label {
+            color: #888;
+            margin-right: 8px;
+        }
+
+        #sim-status .value {
+            font-weight: 600;
+        }
+
+        #sim-status .value.running { color: #4ade80; }
+        #sim-status .value.paused { color: #f59e0b; }
+
+        #sim-status .tick {
+            margin-top: 6px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        h2 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        #threat-list {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .threat-card {
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .threat-card.high {
+            border-left: 3px solid #ef4444;
+        }
+
+        .threat-card.medium {
+            border-left: 3px solid #f59e0b;
+        }
+
+        .threat-card.low {
+            border-left: 3px solid #22c55e;
+        }
+
+        .threat-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .threat-id {
+            font-weight: 600;
+        }
+
+        .threat-level {
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 3px;
+            background: #2a2a3a;
+        }
+
+        .threat-details {
+            font-size: 0.85rem;
+            color: #999;
+        }
+
+        .threat-details span {
+            margin-right: 15px;
+        }
+
+        #no-threats {
+            color: #555;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div id="map-container">
+        <header>
+            <h1>Distributed Sensor Fusion Network</h1>
+            <div id="controls">
+                <button id="btn-pause">Pause</button>
+                <button id="btn-resume" disabled>Resume</button>
+                <button id="btn-restart" class="primary">Restart</button>
+            </div>
+        </header>
+        <div id="canvas-wrapper">
+            <div id="map-area">
+                <canvas id="map"></canvas>
+                <span id="x-axis-label" class="axis-label">X Position</span>
+                <span id="y-axis-label" class="axis-label">Y Position</span>
+                <div id="tick-labels"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="sidebar">
+        <div id="connection-status" class="disconnected">Disconnected</div>
+        <div id="sim-status">
+            <span class="label">Simulation:</span>
+            <span id="sim-state" class="value">Unknown</span>
+            <div class="tick">Tick: <span id="sim-tick">0</span></div>
+        </div>
+        <h2>Confirmed Threats</h2>
+        <div id="threat-list">
+            <div id="no-threats">No confirmed threats</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('map');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvas-wrapper');
+        const mapArea = document.getElementById('map-area');
+        const tickLabelsContainer = document.getElementById('tick-labels');
+        const connectionStatusEl = document.getElementById('connection-status');
+        const simStateEl = document.getElementById('sim-state');
+        const simTickEl = document.getElementById('sim-tick');
+        const threatListEl = document.getElementById('threat-list');
+
+        const btnPause = document.getElementById('btn-pause');
+        const btnResume = document.getElementById('btn-resume');
+        const btnRestart = document.getElementById('btn-restart');
+
+        const WORLD_SIZE = 100;
+        const CONTROL_URL = 'http://localhost:8081';
+        const PADDING = 40;
+        const threats = new Map();
+        let scale = 1;
+        let canvasSize = 0;
+
+        async function sendCommand(cmd) {
+            try {
+                const res = await fetch(`${CONTROL_URL}/${cmd}`, { method: 'POST' });
+                const data = await res.json();
+                updateSimStatus(data);
+            } catch (err) {
+                console.error(`Command ${cmd} failed:`, err);
+            }
+        }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch(`${CONTROL_URL}/status`);
+                const data = await res.json();
+                updateSimStatus(data);
+            } catch (err) {
+                console.error('Status fetch failed:', err);
+            }
+        }
+
+        function updateSimStatus(data) {
+            simStateEl.textContent = data.state.charAt(0).toUpperCase() + data.state.slice(1);
+            simStateEl.className = `value ${data.state}`;
+            simTickEl.textContent = data.tick;
+
+            btnPause.disabled = data.state === 'paused';
+            btnResume.disabled = data.state === 'running';
+        }
+
+        btnPause.addEventListener('click', () => sendCommand('pause'));
+        btnResume.addEventListener('click', () => sendCommand('resume'));
+        btnRestart.addEventListener('click', () => {
+            threats.clear();
+            drawMap();
+            updateThreatList();
+            sendCommand('restart');
+        });
+
+        setInterval(fetchStatus, 1000);
+
+        function createTickLabels() {
+            tickLabelsContainer.innerHTML = '';
+            
+            const plotSize = canvasSize - PADDING;
+            
+            for (let i = 0; i <= 10; i++) {
+                const value = i * 10;
+                const pos = PADDING + (i / 10) * plotSize;
+                
+                // X-axis labels (bottom)
+                const xLabel = document.createElement('span');
+                xLabel.className = 'tick-label';
+                xLabel.textContent = value;
+                xLabel.style.left = `${pos}px`;
+                xLabel.style.bottom = `${PADDING - 20}px`;
+                xLabel.style.transform = 'translateX(-50%)';
+                tickLabelsContainer.appendChild(xLabel);
+                
+                // Y-axis labels (left)
+                const yLabel = document.createElement('span');
+                yLabel.className = 'tick-label';
+                yLabel.textContent = WORLD_SIZE - value;
+                yLabel.style.left = `${PADDING - 25}px`;
+                yLabel.style.top = `${pos}px`;
+                yLabel.style.transform = 'translateY(-50%)';
+                tickLabelsContainer.appendChild(yLabel);
+            }
+        }
+
+        function resizeCanvas() {
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const size = Math.min(wrapperRect.width, wrapperRect.height) - 60;
+            
+            canvasSize = size;
+            scale = window.devicePixelRatio || 1;
+            
+            canvas.width = size * scale;
+            canvas.height = size * scale;
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+            
+            mapArea.style.width = size + 'px';
+            mapArea.style.height = size + 'px';
+            
+            ctx.scale(scale, scale);
+            createTickLabels();
+            drawMap();
+        }
+
+        function worldToCanvas(x, y) {
+            const plotSize = canvasSize - PADDING;
+            return {
+                x: PADDING + (x / WORLD_SIZE) * plotSize,
+                y: PADDING + ((WORLD_SIZE - y) / WORLD_SIZE) * plotSize
+            };
+        }
+
+        function getThreatColor(level) {
+            if (level >= 7) return '#ef4444';
+            if (level >= 4) return '#f59e0b';
+            return '#22c55e';
+        }
+
+        function getThreatClass(level) {
+            if (level >= 7) return 'high';
+            if (level >= 4) return 'medium';
+            return 'low';
+        }
+
+        function drawMap() {
+            const size = canvasSize;
+            const plotSize = size - PADDING;
+
+            // Background
+            ctx.fillStyle = '#111118';
+            ctx.fillRect(0, 0, size, size);
+
+            // Plot area background
+            ctx.fillStyle = '#0d0d12';
+            ctx.fillRect(PADDING, PADDING, plotSize, plotSize);
+
+            // Grid
+            ctx.strokeStyle = '#1a1a24';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 10; i++) {
+                const pos = PADDING + (i / 10) * plotSize;
+                
+                ctx.beginPath();
+                ctx.moveTo(pos, PADDING);
+                ctx.lineTo(pos, PADDING + plotSize);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(PADDING, pos);
+                ctx.lineTo(PADDING + plotSize, pos);
+                ctx.stroke();
+            }
+
+            // Axes
+            ctx.strokeStyle = '#3a3a4a';
+            ctx.lineWidth = 2;
+            
+            // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(PADDING, PADDING);
+            ctx.lineTo(PADDING, PADDING + plotSize);
+            ctx.stroke();
+            
+            // X-axis
+            ctx.beginPath();
+            ctx.moveTo(PADDING, PADDING + plotSize);
+            ctx.lineTo(PADDING + plotSize, PADDING + plotSize);
+            ctx.stroke();
+
+            // Threats
+            threats.forEach((threat, id) => {
+                const pos = worldToCanvas(threat.x, threat.y);
+                const color = getThreatColor(threat.level);
+                const radius = 8 + threat.sensors * 3;
+
+                const gradient = ctx.createRadialGradient(
+                    pos.x, pos.y, 0,
+                    pos.x, pos.y, radius * 2
+                );
+                gradient.addColorStop(0, color + '40');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 11px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText(`T${id}`, pos.x, pos.y + 4);
+            });
+        }
+
+        function updateThreatList() {
+            if (threats.size === 0) {
+                threatListEl.innerHTML = '<div id="no-threats">No confirmed threats</div>';
+                return;
+            }
+
+            let html = '';
+            threats.forEach((threat, id) => {
+                const threatClass = getThreatClass(threat.level);
+                html += `
+                    <div class="threat-card ${threatClass}">
+                        <div class="threat-header">
+                            <span class="threat-id">Threat ${id}</span>
+                            <span class="threat-level">Level ${threat.level}</span>
+                        </div>
+                        <div class="threat-details">
+                            <span>X: ${threat.x.toFixed(1)}</span>
+                            <span>Y: ${threat.y.toFixed(1)}</span>
+                            <span>Sensors: ${threat.sensors}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            threatListEl.innerHTML = html;
+        }
+
+        function connect() {
+            const ws = new WebSocket('ws://localhost:8080/ws');
+
+            ws.onopen = () => {
+                connectionStatusEl.textContent = 'Connected';
+                connectionStatusEl.className = 'connected';
+            };
+
+            ws.onclose = () => {
+                connectionStatusEl.textContent = 'Disconnected - Reconnecting...';
+                connectionStatusEl.className = 'disconnected';
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = () => {
+                ws.close();
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'threat_update') {
+                    threats.set(data.id, {
+                        x: data.x,
+                        y: data.y,
+                        level: data.level,
+                        confidence: data.confidence,
+                        sensors: data.sensors,
+                        lastSeen: Date.now()
+                    });
+                    
+                    drawMap();
+                    updateThreatList();
+                }
+            };
+        }
+
+        setInterval(() => {
+            const now = Date.now();
+            let changed = false;
+            threats.forEach((threat, id) => {
+                if (now - threat.lastSeen > 3000) {
+                    threats.delete(id);
+                    changed = true;
+                }
+            });
+            if (changed) {
+                drawMap();
+                updateThreatList();
+            }
+        }, 1000);
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        connect();
+        fetchStatus();
+    </script>
+</body>
+</html>

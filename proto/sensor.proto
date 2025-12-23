@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package sensor;
+
+option go_package = "distributed-sensor-fusion/shared/generated/sensorpb";
+
+message SensorReading {
+    string sensor_id = 1;
+    int32 threat_id = 2;
+    double x = 3;
+    double y = 4;
+    int32 level = 5;
+    int64 timestamp = 6;
+    double confidence = 7;
+}
+
+message StreamRequest {
+    string sensor_id = 1;
+}
+
+message Ack {
+    bool received = 1;
+}
+
+service SensorService {
+    rpc StreamReadings(stream SensorReading) returns (Ack);
+}

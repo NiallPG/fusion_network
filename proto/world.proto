@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package world;
+
+option go_package = "distributed-sensor-fusion/shared/generated/worldpb";
+
+message Threat {
+    int32 id = 1;
+    double x = 2;
+    double y = 3;
+    double vx = 4;
+    double vy = 5;
+    int32 level = 6;
+}
+
+message WorldState {
+    repeated Threat threats = 1;
+    int32 tick = 2;
+}
+
+message SubscribeRequest {} 
+
+service WorldService {
+    // client calls subscribe and server returns a stream of world state
+    rpc Subscribe(SubscribeRequest) returns (stream WorldState);
+}
